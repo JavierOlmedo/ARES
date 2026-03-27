@@ -54,13 +54,14 @@ Made with ☠  by hackpuntes.com
     # Module control
     parser.add_argument("-m", "--modules", default="nmap,fuzzing,bruteforce",
                         help="Comma-separated list of modules to run (default: nmap,fuzzing,bruteforce)")
+    parser.add_argument("--no-nmap", action="store_true", help="Skip nmap module")
     parser.add_argument("--no-brute", action="store_true", help="Skip brute-force module")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip nuclei module")
     parser.add_argument("--no-fuzz", action="store_true", help="Skip fuzzing module")
 
     # Scan options
     parser.add_argument("--udp", action="store_true", help="Enable UDP scanning")
-    parser.add_argument("--threads", type=int, default=10, help="Number of threads (default: 10)")
+    parser.add_argument("--threads", type=int, default=25, help="Number of threads (default: 25)")
     parser.add_argument("--top-ports", type=int, default=1000, help="Nmap top ports (default: 1000)")
 
     # Wordlists (defaults resolved from wordlists/ folder — see AresConfig)
@@ -295,6 +296,8 @@ def build_config(args) -> AresConfig:
 
     # Process module selection
     modules = [m.strip() for m in args.modules.split(",")]
+    if args.no_nmap and "nmap" in modules:
+        modules.remove("nmap")
     if args.no_brute and "bruteforce" in modules:
         modules.remove("bruteforce")
     if args.no_nuclei and "nuclei" in modules:

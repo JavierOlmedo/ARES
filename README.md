@@ -156,12 +156,13 @@ MODULE_REGISTRY["mymodule"] = MyModule
 | `--quiet`                | Minimal scan (faster, fewer checks)                      |
 | `--aggressive`           | Full port range, higher rate limits                      |
 | `-m, --modules`          | Comma-separated module list (default: `nmap,fuzzing,bruteforce`) |
+| `--no-nmap`              | Skip nmap module                                         |
 | `--no-brute`             | Skip brute-force module                                  |
 | `--no-fuzz`              | Skip fuzzing module                                      |
 | `--no-nuclei`            | Skip nuclei module                                       |
 | `--discover`             | Network host discovery mode (use CIDR as `-t`)           |
 | `--udp`                  | Enable UDP scan                                          |
-| `--threads`              | Thread count (default: `10`)                             |
+| `--threads`              | Thread count (default: `25`)                             |
 | `--top-ports`            | Nmap top ports (default: `1000`)                         |
 | `--extensions`           | Fuzz file extensions (default: `php,html,txt,asp,...`)   |
 | `--wordlist-web`         | Wordlist for directory fuzzing                           |

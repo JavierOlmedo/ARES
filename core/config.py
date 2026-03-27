@@ -50,7 +50,7 @@ class AresConfig:
     target_ip: str = ""
     hostname: str = ""
     output_dir: str = ""
-    threads: int = 10
+    threads: int = 25
     intensity: str = "normal"  # quiet, normal, aggressive
     discover_mode: bool = False
     proxy: str = ""  # e.g. http://127.0.0.1:8080
