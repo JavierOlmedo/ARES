@@ -159,6 +159,7 @@ class FuzzingModule(BaseModule):
 
         # Use dedicated wordlist per mode
         wordlist = self.config.wordlist_web_files if mode == "files" else self.config.wordlist_web
+        logger.info(f"  Wordlist ({mode}): {wordlist}")
 
         if self.fuzzer == "gobuster":
             cmd = (

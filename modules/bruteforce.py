@@ -57,6 +57,9 @@ class BruteForceModule(BaseModule):
             logger.warning(f"Password wordlist not found: {self.config.wordlist_passwords}")
             return results
 
+        logger.info(f"Wordlist users    : {self.config.wordlist_users}")
+        logger.info(f"Wordlist passwords: {self.config.wordlist_passwords}")
+
         for target in targets:
             service = target["service"]
             port = target["port"]
