@@ -54,8 +54,11 @@ python3 ares.py --check
 ## Quick Start
 
 ```bash
-# Basic scan (all modules: nmap + fuzzing + bruteforce + nuclei)
+# Basic scan (default: nmap + fuzzing + bruteforce)
 ares -t 10.10.11.100 -H target.htb
+
+# Include nuclei vulnerability scan
+ares -t 10.10.11.100 -H target.htb -m nmap,fuzzing,bruteforce,nuclei
 
 # Network discovery first (find live hosts in a range)
 ares -t 10.10.10.0/24 --discover

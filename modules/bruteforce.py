@@ -128,6 +128,8 @@ class BruteForceModule(BaseModule):
             if os.path.isfile(pw_head):
                 pw_list = pw_head
 
+        proxy_arg = f"proxy={self.config.proxy}" if self.config.proxy else ""
+
         if module == "http_fuzz":
             scheme = "https" if port in (443, 8443) else "http"
             url = f"{scheme}://{self.config.target_ip}:{port}/"
@@ -135,6 +137,7 @@ class BruteForceModule(BaseModule):
                 f"patator http_fuzz url={url} "
                 f"user_pass=FILE0:FILE1 "
                 f"0={self.config.wordlist_users} 1={pw_list} "
+                f"{proxy_arg} "
                 f"-t {threads} -x {ignore} --max-retries=1"
             )
         elif module == "vnc_login":

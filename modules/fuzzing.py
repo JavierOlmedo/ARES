@@ -161,12 +161,14 @@ class FuzzingModule(BaseModule):
         wordlist = self.config.wordlist_web_files if mode == "files" else self.config.wordlist_web
         logger.info(f"  Wordlist ({mode}): {wordlist}")
 
+        proxy_flag = f"--proxy {self.config.proxy}" if self.config.proxy else ""
+
         if self.fuzzer == "gobuster":
             cmd = (
                 f"gobuster dir -u {url} "
                 f"-w {wordlist} "
                 + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} --no-error -q -k --timeout 10s"
+                + f"-t {threads} --no-error -q -k --timeout 10s {proxy_flag}"
             )
             result = run_command_live(
                 cmd, timeout=600,
@@ -180,10 +182,11 @@ class FuzzingModule(BaseModule):
         elif self.fuzzer == "ffuf":
             ext_flag = f"-e .{exts.replace(',', ',.')}" if mode == "files" else ""
             json_out = outfile.replace(".txt", ".json")
+            proxy_flag_ffuf = f"-x {self.config.proxy}" if self.config.proxy else ""
             cmd = (
                 f"ffuf -u {url}/FUZZ "
                 f"-w {wordlist} "
-                f"{ext_flag} "
+                f"{ext_flag} {proxy_flag_ffuf} "
                 f"-t {threads} -o {json_out} -of json -mc all -fc 404 -c"
             )
             result = run_command_live(
@@ -193,11 +196,12 @@ class FuzzingModule(BaseModule):
             return found_live or self._parse_results(outfile, result, port, mode)
 
         elif self.fuzzer == "feroxbuster":
+            proxy_flag_ferox = f"--proxy {self.config.proxy}" if self.config.proxy else ""
             cmd = (
                 f"feroxbuster -u {url} "
                 f"-w {wordlist} "
                 + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} -o {outfile} -k --depth 1"
+                + f"-t {threads} -o {outfile} -k --depth 1 {proxy_flag_ferox}"
             )
             result = run_command_live(
                 cmd, timeout=600,

@@ -26,22 +26,24 @@ class Orchestrator:
         """Execute full scan pipeline."""
         self.start_time = time.time()
 
-        logger.print_banner()
-        logger.info(f"Target: {self.config.target_ip}")
-        if self.config.hostname:
-            logger.info(f"Hostname: {self.config.hostname}")
-        logger.info(f"Output: {self.config.output_dir}")
-        logger.info(f"Intensity: {self.config.intensity}")
-        logger.info(f"Modules: {', '.join(self.config.modules_enabled)}")
-        logger.info(f"Wordlist dirs : {self.config.wordlist_web}")
-        logger.info(f"Wordlist files: {self.config.wordlist_web_files}")
-        logger.info(f"Wordlist users: {self.config.wordlist_users}")
-        logger.info(f"Wordlist pass : {self.config.wordlist_passwords}")
-        logger.console.print()
-
-        # Setup workspace
+        # Setup workspace first so output_dir is resolved before printing
         self.config.setup_workspace()
         self.config.save()
+
+        logger.print_banner()
+        logger.info(f"Target   : {self.config.target_ip}")
+        if self.config.hostname:
+            logger.info(f"Hostname : {self.config.hostname}")
+        logger.info(f"Output   : {self.config.output_dir}")
+        logger.info(f"Intensity: {self.config.intensity}")
+        logger.info(f"Modules  : {', '.join(self.config.modules_enabled)}")
+        logger.info(f"WL dirs  : {self.config.wordlist_web}")
+        logger.info(f"WL files : {self.config.wordlist_web_files}")
+        logger.info(f"WL users : {self.config.wordlist_users}")
+        logger.info(f"WL pass  : {self.config.wordlist_passwords}")
+        if self.config.proxy:
+            logger.info(f"Proxy    : {self.config.proxy}")
+        logger.console.print()
 
         # Check /etc/hosts
         if self.config.hostname:

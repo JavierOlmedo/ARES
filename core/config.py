@@ -53,6 +53,7 @@ class AresConfig:
     threads: int = 10
     intensity: str = "normal"  # quiet, normal, aggressive
     discover_mode: bool = False
+    proxy: str = ""  # e.g. http://127.0.0.1:8080
 
     # Wordlists — local lists take priority, auto-detected by prefix
     wordlist_users: str = field(default_factory=lambda: _local_find(
@@ -91,7 +92,7 @@ class AresConfig:
     brute_services: list = field(default_factory=lambda: [
         "ssh", "ftp", "smb", "rdp", "http-get", "mysql", "postgres", "mssql"
     ])
-    modules_enabled: list = field(default_factory=lambda: ["nmap", "fuzzing", "bruteforce", "nuclei"])
+    modules_enabled: list = field(default_factory=lambda: ["nmap", "fuzzing", "bruteforce"])
     report_formats: list = field(default_factory=lambda: ["console", "markdown", "html"])
 
     def setup_workspace(self):

@@ -52,8 +52,8 @@ Made with ☠  by hackpuntes.com
     parser.set_defaults(intensity="normal")
 
     # Module control
-    parser.add_argument("-m", "--modules", default="nmap,fuzzing,bruteforce,nuclei",
-                        help="Comma-separated list of modules to run (default: all)")
+    parser.add_argument("-m", "--modules", default="nmap,fuzzing,bruteforce",
+                        help="Comma-separated list of modules to run (default: nmap,fuzzing,bruteforce)")
     parser.add_argument("--no-brute", action="store_true", help="Skip brute-force module")
     parser.add_argument("--no-nuclei", action="store_true", help="Skip nuclei module")
     parser.add_argument("--no-fuzz", action="store_true", help="Skip fuzzing module")
@@ -86,6 +86,10 @@ Made with ☠  by hackpuntes.com
     # Nuclei
     parser.add_argument("--nuclei-severity", default="low,medium,high,critical",
                         help="Nuclei severity filter (default: low,medium,high,critical)")
+
+    # Proxy
+    parser.add_argument("--proxy", default="",
+                        help="HTTP proxy for fuzzing/brute-force (e.g. http://127.0.0.1:8080)")
 
     # Network discovery
     parser.add_argument("--discover", action="store_true",
@@ -272,6 +276,7 @@ def build_config(args) -> AresConfig:
         intensity=args.intensity,
         nmap_top_ports=args.top_ports,
         run_udp=args.udp,
+        proxy=args.proxy,
         fuzz_extensions=args.extensions,
         nuclei_severity=args.nuclei_severity,
         report_formats=[f.strip() for f in args.report.split(",")],
