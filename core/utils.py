@@ -77,16 +77,25 @@ def parse_nmap_service(service_str: str) -> str:
     return mapping.get(service_str.lower(), None)
 
 
-def add_to_hosts(ip: str, hostname: str):
-    """Check if /etc/hosts has the entry, suggest adding if not."""
+def add_to_hosts(ip: str, hostname: str) -> bool:
+    """Ensure /etc/hosts has the entry for ip → hostname. Writes it if missing."""
+    hosts_file = "/etc/hosts"
+    entry = f"{ip}\t{hostname}"
     try:
-        with open("/etc/hosts", "r") as f:
+        with open(hosts_file, "r") as f:
             content = f.read()
         if hostname in content:
+            from core.logger import info
+            info(f"/etc/hosts already contains {hostname}")
             return True
-        warning(f"{hostname} not in /etc/hosts. Run: echo '{ip} {hostname}' | sudo tee -a /etc/hosts")
-        return False
+        with open(hosts_file, "a") as f:
+            f.write(f"\n{entry}\n")
+        from core.logger import success
+        success(f"Added to /etc/hosts: {entry}")
+        return True
     except PermissionError:
+        warning(f"Cannot write /etc/hosts — run as root or add manually:")
+        warning(f"  echo '{entry}' | sudo tee -a /etc/hosts")
         return False
 
 

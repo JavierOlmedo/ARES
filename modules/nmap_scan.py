@@ -76,23 +76,11 @@ class NmapModule(BaseModule):
         return results
 
     def _quick_tcp_scan(self) -> list:
-        """Fast SYN scan to discover open ports."""
+        """Fast SYN scan across all 65535 TCP ports."""
         outfile = os.path.join(self.output_path, "quick_tcp")
-        cmd = [
-            "nmap", "-sS", "--min-rate", "5000", "-Pn",
-            "-p-" if self.config.intensity == "aggressive" else f"--top-ports {self.config.nmap_top_ports}",
-            "-oA", outfile,
-            self.config.target_ip
-        ]
-        # Fix: nmap doesn't like combined args, split properly
-        cmd_str = f"nmap -sS --min-rate 5000 -Pn "
-        if self.config.intensity == "aggressive":
-            cmd_str += "-p- "
-        else:
-            cmd_str += f"--top-ports {self.config.nmap_top_ports} "
-        cmd_str += f"-oA {outfile} {self.config.target_ip}"
-
-        result = run_command(cmd_str, timeout=300)
+        rate = "10000" if self.config.intensity == "aggressive" else "5000"
+        cmd_str = f"nmap -sS --min-rate {rate} -Pn -p- -oA {outfile} {self.config.target_ip}"
+        run_command(cmd_str, timeout=600)
         return self._extract_open_ports(f"{outfile}.xml")
 
     def _full_tcp_scan(self) -> list:
