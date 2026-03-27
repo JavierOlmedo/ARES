@@ -169,14 +169,28 @@ class FuzzingModule(BaseModule):
         total_words = count_lines(wordlist)
         logger.info(f"  Wordlist ({mode}): {wordlist} [{total_words:,} words]")
 
-        # Background progress thread — fires every 10s so the user knows we're alive
+        # Shared progress state — updated by on_stderr when ffuf writes to stderr
+        _progress = {"word": 0, "rate": 0}
         _stop = threading.Event()
+
+        def _on_stderr(line):
+            m = re.search(r'Progress: \[(\d+)/\d+\].*?::\s*(\d+) req/sec', line)
+            if m:
+                _progress["word"] = int(m.group(1))
+                _progress["rate"] = int(m.group(2))
 
         def _progress_reporter():
             elapsed = 0
             while not _stop.wait(10):
                 elapsed += 10
-                logger.info(f"  [~{elapsed}s elapsed | {len(found_live)} found / {total_words:,} words]")
+                if _progress["word"]:
+                    rate_str = f" @ {_progress['rate']} req/s" if _progress["rate"] else ""
+                    logger.info(
+                        f"  [{_progress['word']:,}/{total_words:,} words{rate_str}"
+                        f" | {len(found_live)} found]"
+                    )
+                else:
+                    logger.info(f"  [~{elapsed}s elapsed | {len(found_live)} found / {total_words:,} words]")
 
         _pt = threading.Thread(target=_progress_reporter, daemon=True)
         _pt.start()
@@ -196,11 +210,12 @@ class FuzzingModule(BaseModule):
                     f'-w {wordlist} '
                     f'-H "User-Agent: {ua}" '
                     f'{ext_flag} {proxy_flag_ffuf} '
-                    f'-t {effective_threads} -timeout 10 -o {json_out} -of json -mc all -fc 404 -s'
+                    f'-t {effective_threads} -timeout 10 -o {json_out} -of json -mc all -fc 404'
                 )
                 result = run_command_live(
                     cmd, timeout=600,
                     on_line=lambda line: self._on_ffuf_line(line, port, mode, found_live),
+                    on_stderr=_on_stderr,
                 )
                 return found_live or self._parse_results(outfile, result, port, mode)
 

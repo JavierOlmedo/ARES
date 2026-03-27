@@ -54,10 +54,11 @@ def run_command(cmd: list | str, timeout: int = 600, cwd: str = None) -> dict:
         return {"stdout": "", "stderr": str(e), "returncode": -1, "timed_out": False}
 
 
-def run_command_live(cmd: str, timeout: int = 600, on_line=None, cwd: str = None) -> dict:
+def run_command_live(cmd: str, timeout: int = 600, on_line=None, on_stderr=None, cwd: str = None) -> dict:
     """
     Run a shell command streaming stdout line by line.
-    Calls on_line(line) for each output line (stripped).
+    Calls on_line(line) for each stdout line (stripped).
+    Calls on_stderr(line) for each stderr line — handles \\r-delimited progress bars.
     Returns same dict as run_command.
     """
     import threading
@@ -72,8 +73,21 @@ def run_command_live(cmd: str, timeout: int = 600, on_line=None, cwd: str = None
         )
 
         def _read_stderr():
-            for line in proc.stderr:
-                stderr_lines.append(line)
+            buf = ""
+            while True:
+                ch = proc.stderr.read(1)
+                if not ch:
+                    break
+                stderr_lines.append(ch)
+                if ch in ("\r", "\n"):
+                    line = buf.strip()
+                    buf = ""
+                    if line and on_stderr:
+                        on_stderr(line)
+                else:
+                    buf += ch
+            if buf.strip() and on_stderr:
+                on_stderr(buf.strip())
 
         t = threading.Thread(target=_read_stderr, daemon=True)
         t.start()
