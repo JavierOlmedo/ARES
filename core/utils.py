@@ -197,6 +197,15 @@ def add_to_hosts(ip: str, hostname: str) -> bool:
         return False
 
 
+def count_lines(filepath: str) -> int:
+    """Count non-empty lines in a file (fast, for wordlist sizing)."""
+    try:
+        with open(filepath, errors="ignore") as f:
+            return sum(1 for line in f if line.strip())
+    except OSError:
+        return 0
+
+
 def file_has_content(filepath: str) -> bool:
     """Check if a file exists and is non-empty."""
     return os.path.isfile(filepath) and os.path.getsize(filepath) > 0

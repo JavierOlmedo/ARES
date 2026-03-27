@@ -11,8 +11,9 @@ Flow per web port:
 import os
 import re
 import json
+import threading
 from modules.base import BaseModule
-from core.utils import run_command, run_command_live, check_tool
+from core.utils import run_command, run_command_live, check_tool, count_lines
 from core import logger
 
 
@@ -165,60 +166,78 @@ class FuzzingModule(BaseModule):
 
         # Use dedicated wordlist per mode
         wordlist = self.config.wordlist_web_files if mode == "files" else self.config.wordlist_web
-        logger.info(f"  Wordlist ({mode}): {wordlist}")
+        total_words = count_lines(wordlist)
+        logger.info(f"  Wordlist ({mode}): {wordlist} [{total_words:,} words]")
+
+        # Background progress thread — fires every 10s so the user knows we're alive
+        _stop = threading.Event()
+
+        def _progress_reporter():
+            elapsed = 0
+            while not _stop.wait(10):
+                elapsed += 10
+                logger.info(f"  [~{elapsed}s elapsed | {len(found_live)} found / {total_words:,} words]")
+
+        _pt = threading.Thread(target=_progress_reporter, daemon=True)
+        _pt.start()
 
         proxy_flag = f"--proxy {self.config.proxy}" if self.config.proxy else ""
         ua = self.UA
+        # Reduce threads and increase timeout when routing through a proxy
+        effective_threads = min(threads, 5) if self.config.proxy else threads
 
-        if self.fuzzer == "ffuf":
-            ext_flag = f"-e .{exts.replace(',', ',.')}" if mode == "files" else ""
-            json_out = outfile.replace(".txt", ".json")
-            proxy_flag_ffuf = f"-x {self.config.proxy}" if self.config.proxy else ""
-            cmd = (
-                f'ffuf -u {url}/FUZZ '
-                f'-w {wordlist} '
-                f'-H "User-Agent: {ua}" '
-                f'{ext_flag} {proxy_flag_ffuf} '
-                f'-t {threads} -o {json_out} -of json -mc all -fc 404 -s'
-            )
-            result = run_command_live(
-                cmd, timeout=600,
-                on_line=lambda line: self._on_ffuf_line(line, port, mode, found_live),
-            )
-            return found_live or self._parse_results(outfile, result, port, mode)
+        try:
+            if self.fuzzer == "ffuf":
+                ext_flag = f"-e .{exts.replace(',', ',.')}" if mode == "files" else ""
+                json_out = outfile.replace(".txt", ".json")
+                proxy_flag_ffuf = f"-x {self.config.proxy}" if self.config.proxy else ""
+                cmd = (
+                    f'ffuf -u {url}/FUZZ '
+                    f'-w {wordlist} '
+                    f'-H "User-Agent: {ua}" '
+                    f'{ext_flag} {proxy_flag_ffuf} '
+                    f'-t {effective_threads} -timeout 10 -o {json_out} -of json -mc all -fc 404 -s'
+                )
+                result = run_command_live(
+                    cmd, timeout=600,
+                    on_line=lambda line: self._on_ffuf_line(line, port, mode, found_live),
+                )
+                return found_live or self._parse_results(outfile, result, port, mode)
 
-        elif self.fuzzer == "gobuster":
-            cmd = (
-                f'gobuster dir -u {url} '
-                f'-w {wordlist} '
-                f'-H "User-Agent: {ua}" '
-                + (f'-x {exts} ' if mode == "files" else '')
-                + f'-t {threads} --no-error -q -k --timeout 10s --wildcard {proxy_flag}'
-            )
-            result = run_command_live(
-                cmd, timeout=600,
-                on_line=lambda line: self._on_gobuster_line(line, port, mode, found_live),
-            )
-            with open(outfile, "w") as f:
-                f.write(result.get("stdout", ""))
-            return found_live
+            elif self.fuzzer == "gobuster":
+                cmd = (
+                    f'gobuster dir -u {url} '
+                    f'-w {wordlist} '
+                    f'-H "User-Agent: {ua}" '
+                    + (f'-x {exts} ' if mode == "files" else '')
+                    + f'-t {effective_threads} --no-error -q -k --timeout 10s --wildcard {proxy_flag}'
+                )
+                result = run_command_live(
+                    cmd, timeout=600,
+                    on_line=lambda line: self._on_gobuster_line(line, port, mode, found_live),
+                )
+                with open(outfile, "w") as f:
+                    f.write(result.get("stdout", ""))
+                return found_live
 
-        elif self.fuzzer == "feroxbuster":
-            proxy_flag_ferox = f"--proxy {self.config.proxy}" if self.config.proxy else ""
-            cmd = (
-                f'feroxbuster -u {url} '
-                f'-w {wordlist} '
-                f'-H "User-Agent: {ua}" '
-                + (f'-x {exts} ' if mode == "files" else '')
-                + f'-t {threads} -o {outfile} -k --depth 1 {proxy_flag_ferox}'
-            )
-            result = run_command_live(
-                cmd, timeout=600,
-                on_line=lambda line: self._on_ferox_line(line, port, mode, found_live),
-            )
-            return found_live or self._parse_results(outfile, result, port, mode)
+            elif self.fuzzer == "feroxbuster":
+                proxy_flag_ferox = f"--proxy {self.config.proxy}" if self.config.proxy else ""
+                cmd = (
+                    f'feroxbuster -u {url} '
+                    f'-w {wordlist} '
+                    f'-H "User-Agent: {ua}" '
+                    + (f'-x {exts} ' if mode == "files" else '')
+                    + f'-t {effective_threads} -o {outfile} -k --depth 1 {proxy_flag_ferox}'
+                )
+                result = run_command_live(
+                    cmd, timeout=600,
+                    on_line=lambda line: self._on_ferox_line(line, port, mode, found_live),
+                )
+                return found_live or self._parse_results(outfile, result, port, mode)
 
-        return []
+            return []
+        finally:
+            _stop.set()
 
     def _fuzz_vhosts(self, scheme: str, port: int) -> list:
         wordlist = self.config.wordlist_vhost

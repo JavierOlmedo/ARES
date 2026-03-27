@@ -5,7 +5,7 @@ Credential brute-forcing with Patator.
 import os
 import re
 from modules.base import BaseModule
-from core.utils import run_command, parse_nmap_service
+from core.utils import run_command, run_command_live, parse_nmap_service, count_lines
 from core import logger
 
 
@@ -128,6 +128,15 @@ class BruteForceModule(BaseModule):
             if os.path.isfile(pw_head):
                 pw_list = pw_head
 
+        # Show combination count so the user knows what to expect
+        n_users = count_lines(self.config.wordlist_users)
+        n_pws = count_lines(pw_list)
+        total_combos = n_users * n_pws if module != "vnc_login" else n_pws
+        if module == "vnc_login":
+            logger.info(f"  Combinations: {n_pws:,} passwords")
+        else:
+            logger.info(f"  Combinations: {n_users} users × {n_pws} passwords = {total_combos:,}")
+
         proxy_arg = f"proxy={self.config.proxy}" if self.config.proxy else ""
 
         if module == "http_fuzz":
@@ -157,7 +166,17 @@ class BruteForceModule(BaseModule):
             )
 
         logger.info(f"  $ {cmd}")
-        result = run_command(cmd, timeout=300)
+
+        attempt = [0]
+
+        def _on_line(line):
+            if "INFO -" in line:
+                attempt[0] += 1
+                if attempt[0] % 50 == 0:
+                    logger.info(f"  [{attempt[0]:,}/{total_combos:,}] trying...")
+
+        result = run_command_live(cmd, timeout=300, on_line=_on_line)
+        logger.info(f"  [{attempt[0]:,}/{total_combos:,}] done")
 
         raw = result.get("stdout", "")
         with open(outfile, "w") as f:
