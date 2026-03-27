@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""
+ARES — Advanced Reconnaissance & Enumeration Scanner
+by hackpuntes.com
+
+Usage:
+    sudo python3 ares.py -t 10.10.11.100
+    sudo python3 ares.py -t 10.10.11.100 -H target.htb
+    sudo python3 ares.py -t 10.10.11.100 -H target.htb --aggressive --udp
+    sudo python3 ares.py -t 10.10.11.100 -m nmap,fuzzing
+"""
+import argparse
+import sys
+import os
+
+# Add parent dir to path for module imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core.config import AresConfig
+from core.orchestrator import Orchestrator
+from core import logger
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="⚔ ARES — Advanced Reconnaissance & Enumeration Scanner",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  sudo python3 ares.py -t 10.10.11.100
+  sudo python3 ares.py -t 10.10.11.100 -H target.htb
+  sudo python3 ares.py -t 10.10.11.100 -H target.htb --aggressive --udp
+  sudo python3 ares.py -t 10.10.11.100 -m nmap,fuzzing --threads 20
+  sudo python3 ares.py -t 10.10.11.100 --no-brute --no-nuclei
+
+Made with ☠  by hackpuntes.com
+        """
+    )
+
+    # Required (not needed for --check)
+    parser.add_argument("-t", "--target", default="", help="Target IP address")
+
+    # Optional target config
+    parser.add_argument("-H", "--hostname", default="", help="Target hostname (e.g., target.htb)")
+    parser.add_argument("-o", "--output", default="", help="Output directory (default: ares_<target>)")
+
+    # Scan intensity
+    intensity = parser.add_mutually_exclusive_group()
+    intensity.add_argument("--quiet", action="store_const", const="quiet", dest="intensity", help="Minimal scanning (quick)")
+    intensity.add_argument("--aggressive", action="store_const", const="aggressive", dest="intensity", help="Full port scan, more thorough")
+    parser.set_defaults(intensity="normal")
+
+    # Module control
+    parser.add_argument("-m", "--modules", default="nmap,fuzzing,bruteforce,nuclei",
+                        help="Comma-separated list of modules to run (default: all)")
+    parser.add_argument("--no-brute", action="store_true", help="Skip brute-force module")
+    parser.add_argument("--no-nuclei", action="store_true", help="Skip nuclei module")
+    parser.add_argument("--no-fuzz", action="store_true", help="Skip fuzzing module")
+
+    # Scan options
+    parser.add_argument("--udp", action="store_true", help="Enable UDP scanning")
+    parser.add_argument("--threads", type=int, default=10, help="Number of threads (default: 10)")
+    parser.add_argument("--top-ports", type=int, default=1000, help="Nmap top ports (default: 1000)")
+
+    # Wordlists
+    parser.add_argument("--wordlist-web", default="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
+                        help="Wordlist for directory fuzzing")
+    parser.add_argument("--wordlist-vhost", default="/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+                        help="Wordlist for vhost fuzzing")
+    parser.add_argument("--wordlist-users", default="/usr/share/seclists/Usernames/top-usernames-shortlist.txt",
+                        help="Wordlist for username brute-force")
+    parser.add_argument("--wordlist-passwords", default="/usr/share/wordlists/rockyou.txt",
+                        help="Wordlist for password brute-force")
+
+    # Extensions
+    parser.add_argument("--extensions", default="php,html,txt,asp,aspx,jsp,bak,old,config",
+                        help="File extensions for directory fuzzing")
+
+    # Report formats
+    parser.add_argument("--report", default="console,markdown,html",
+                        help="Report formats: console,markdown,html (default: all)")
+
+    # Nuclei
+    parser.add_argument("--nuclei-severity", default="low,medium,high,critical",
+                        help="Nuclei severity filter (default: low,medium,high,critical)")
+
+    # Preflight
+    parser.add_argument("--check", action="store_true",
+                        help="Check dependencies and exit (no scan)")
+
+    return parser.parse_args()
+
+
+def cmd_check():
+    """Run dependency check and display results with Rich."""
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich import box
+    from core.utils import dependency_check
+
+    logger.print_banner()
+    results = dependency_check()
+    errors = 0
+
+    table = Table(box=box.ROUNDED, show_header=True, header_style="bold magenta",
+                  border_style="dim", padding=(0, 1))
+    table.add_column("Component", style="cyan", width=22)
+    table.add_column("Status", width=8)
+    table.add_column("Detail", style="dim")
+
+    # Python
+    py = results["python"]
+    status = "[green]✓  OK[/green]" if py["ok"] else "[red]✗  FAIL[/red]"
+    if not py["ok"]:
+        errors += 1
+    table.add_row("Python", status, py["version"] + ("" if py["ok"] else " (need 3.10+)"))
+
+    # Required tools
+    for tool, available in results["tools"].items():
+        status = "[green]✓  OK[/green]" if available else "[red]✗  MISS[/red]"
+        detail = "found in PATH" if available else f"sudo apt install {tool}"
+        if not available:
+            errors += 1
+        table.add_row(tool, status, detail)
+
+    # Fuzzers (at least one)
+    fuzzer_found = [f for f, ok in results["fuzzers"].items() if ok]
+    if fuzzer_found:
+        table.add_row("fuzzer", "[green]✓  OK[/green]", ", ".join(fuzzer_found))
+    else:
+        errors += 1
+        table.add_row("fuzzer", "[red]✗  MISS[/red]",
+                      "need gobuster, ffuf or feroxbuster")
+
+    # Wordlists
+    for label, info in results["wordlists"].items():
+        status = "[green]✓  OK[/green]" if info["ok"] else "[yellow]⚠  MISS[/yellow]"
+        detail = info["path"] if info["ok"] else f"not found: {info['path']}"
+        table.add_row(label, status, detail)
+
+    logger.console.print(table)
+    logger.console.print()
+
+    if errors == 0:
+        logger.console.print(Panel(
+            "[green]All dependencies satisfied — ARES is ready![/green]\n"
+            "[dim]sudo python3 ares.py -t <TARGET_IP>[/dim]",
+            border_style="green", box=box.ROUNDED
+        ))
+    else:
+        logger.console.print(Panel(
+            f"[red]{errors} missing dependenc{'y' if errors == 1 else 'ies'}[/red] — "
+            "run [cyan]bash install.sh[/cyan] to fix them",
+            border_style="red", box=box.ROUNDED
+        ))
+
+    sys.exit(0 if errors == 0 else 1)
+
+
+def build_config(args) -> AresConfig:
+    """Build AresConfig from CLI arguments."""
+    config = AresConfig(
+        target_ip=args.target,
+        hostname=args.hostname,
+        output_dir=args.output,
+        threads=args.threads,
+        intensity=args.intensity,
+        nmap_top_ports=args.top_ports,
+        run_udp=args.udp,
+        wordlist_web=args.wordlist_web,
+        wordlist_vhost=args.wordlist_vhost,
+        wordlist_users=args.wordlist_users,
+        wordlist_passwords=args.wordlist_passwords,
+        fuzz_extensions=args.extensions,
+        nuclei_severity=args.nuclei_severity,
+        report_formats=[f.strip() for f in args.report.split(",")],
+    )
+
+    # Process module selection
+    modules = [m.strip() for m in args.modules.split(",")]
+    if args.no_brute and "bruteforce" in modules:
+        modules.remove("bruteforce")
+    if args.no_nuclei and "nuclei" in modules:
+        modules.remove("nuclei")
+    if args.no_fuzz and "fuzzing" in modules:
+        modules.remove("fuzzing")
+    config.modules_enabled = modules
+
+    return config
+
+
+def main():
+    # Check if running as root (needed for SYN scan)
+    args = parse_args()
+
+    if args.check:
+        cmd_check()  # exits
+
+    if not args.target:
+        logger.error("Target is required. Use -t <IP> or --check to verify dependencies.")
+        sys.exit(1)
+
+    if os.geteuid() != 0:
+        logger.warning("ARES works best with root privileges (SYN scan, etc.)")
+        logger.warning("Consider running with: sudo python3 ares.py ...")
+        logger.console.print()
+
+    config = build_config(args)
+
+    try:
+        orchestrator = Orchestrator(config)
+        orchestrator.run()
+    except KeyboardInterrupt:
+        logger.console.print("\n")
+        logger.warning("Scan interrupted by user. Partial results may be available.")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
