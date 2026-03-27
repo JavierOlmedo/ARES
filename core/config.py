@@ -66,7 +66,8 @@ class AresConfig:
         """Create organized folder structure for the target."""
         if not self.output_dir:
             safe_name = self.hostname.replace(".", "_") if self.hostname else self.target_ip.replace(".", "_")
-            self.output_dir = os.path.join(os.getcwd(), f"ares_{safe_name}")
+            ares_home = os.path.expanduser("~/.ares")
+            self.output_dir = os.path.join(ares_home, safe_name)
 
         dirs = [
             self.output_dir,

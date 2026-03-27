@@ -48,6 +48,9 @@ if [[ "$UPDATE_MODE" -eq 1 ]]; then
     echo ""
 fi
 
+# Resolve installation directory (wherever install.sh lives)
+INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)
+
 # ── Root check ─────────────────────────────────────────────────────────────────
 if [[ "$EUID" -ne 0 ]]; then
     warn "Not running as root — apt installs will be skipped if they fail"
@@ -118,6 +121,35 @@ else
     fi
 fi
 
+# ── ares command ────────────────────────────────────────────────────────────────
+echo -e "\n${BOLD}[ares command]${RESET}"
+
+WRAPPER=/usr/local/bin/ares
+cat > /tmp/ares_wrapper << WRAPPER_EOF
+#!/usr/bin/env bash
+if [[ \$EUID -ne 0 ]]; then
+    exec sudo python3 ${INSTALL_DIR}/ares.py "\$@"
+else
+    exec python3 ${INSTALL_DIR}/ares.py "\$@"
+fi
+WRAPPER_EOF
+
+if sudo mv /tmp/ares_wrapper "$WRAPPER" && sudo chmod +x "$WRAPPER"; then
+    ok "ares → $WRAPPER (installed from $INSTALL_DIR)"
+    info "You can now run: ares -t <TARGET_IP>"
+else
+    fail "Could not install wrapper at $WRAPPER — try: sudo bash install.sh"
+fi
+
+# ── ~/.ares workspace ────────────────────────────────────────────────────────────
+echo -e "\n${BOLD}[Workspace]${RESET}"
+ARES_HOME="$HOME/.ares"
+if mkdir -p "$ARES_HOME" 2>/dev/null; then
+    ok "~/.ares workspace ready ($ARES_HOME)"
+else
+    warn "Could not create ~/.ares — projects will fall back to current directory"
+fi
+
 # ── Wordlists ───────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}[Wordlists]${RESET}"
 
@@ -144,8 +176,8 @@ fi
 echo ""
 if [[ "$ERRORS" -eq 0 ]]; then
     echo -e "${GREEN}${BOLD}  ✓  ARES is ready!${RESET}"
-    echo -e "     sudo python3 ares.py -t <TARGET_IP>\n"
+    echo -e "     ${CYAN}ares -t <TARGET_IP>${RESET}\n"
 else
     echo -e "${RED}${BOLD}  ✗  $ERRORS error(s) — fix them before running ARES${RESET}"
-    echo -e "     Run ${CYAN}sudo python3 ares.py --check${RESET} anytime to re-verify\n"
+    echo -e "     Run ${CYAN}ares --check${RESET} anytime to re-verify\n"
 fi

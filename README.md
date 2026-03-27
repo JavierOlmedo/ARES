@@ -40,11 +40,10 @@ Root privileges recommended (SYN scan)
 ### Update
 
 ```bash
-cd /opt/ARES
-bash install.sh --update
+ares --update
 ```
 
-Pulls the latest changes from git and re-verifies all dependencies.
+Pulls the latest version from [GitHub](https://github.com/JavierOlmedo/ARES), updates Python dependencies, and refreshes the `/usr/local/bin/ares` wrapper automatically. No need to `cd` anywhere.
 
 ### Verify your setup
 
@@ -56,22 +55,22 @@ python3 ares.py --check
 
 ```bash
 # Basic scan (all modules: nmap + fuzzing + bruteforce + nuclei)
-sudo python3 ares.py -t 10.10.11.100 -H target.htb
+ares -t 10.10.11.100 -H target.htb
 
 # Network discovery first (find live hosts in a range)
-sudo python3 ares.py -t 10.10.10.0/24 --discover
+ares -t 10.10.10.0/24 --discover
 
 # Quick scan — nmap + fuzzing only
-sudo python3 ares.py -t 10.10.11.100 -H target.htb -m nmap,fuzzing
+ares -t 10.10.11.100 -H target.htb -m nmap,fuzzing
 
 # Aggressive — full port range + UDP
-sudo python3 ares.py -t 10.10.11.100 -H target.htb --aggressive --udp
+ares -t 10.10.11.100 -H target.htb --aggressive --udp
 
 # Skip brute-force and nuclei
-sudo python3 ares.py -t 10.10.11.100 --no-brute --no-nuclei
+ares -t 10.10.11.100 --no-brute --no-nuclei
 
 # Custom wordlists and threads
-sudo python3 ares.py -t 10.10.11.100 -H target.htb \
+ares -t 10.10.11.100 -H target.htb \
     --wordlist-web /usr/share/seclists/Discovery/Web-Content/big.txt \
     --threads 20
 ```
@@ -79,7 +78,7 @@ sudo python3 ares.py -t 10.10.11.100 -H target.htb \
 ## Output Structure
 
 ```
-ares_target_htb/
+~/.ares/target_htb/
 ├── nmap/
 │   ├── quick_tcp.{nmap,xml,gnmap}
 │   ├── detailed.{nmap,xml,gnmap}
@@ -156,6 +155,7 @@ MODULE_REGISTRY["mymodule"] = MyModule
 | `--extensions`        | Fuzz extensions (default: php,html,txt...) |
 | `--report`            | Report formats (console,markdown,html)     |
 | `--check`             | Verify dependencies and exit               |
+| `--update`            | Update to latest version from GitHub       |
 
 ## Custom Wordlists
 

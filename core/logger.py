@@ -11,17 +11,23 @@ import time
 
 console = Console()
 
-BANNER = r"""
-[bold red]
-    ___    ____  ___________
-   /   |  / __ \/ ____/ ___/
-  / /| | / /_/ / __/  \__ \ 
- / ___ |/ _, _/ /___ ___/ / 
-/_/  |_/_/ |_/_____//____/  
-[/bold red]
-[dim]Advanced Reconnaissance & Enumeration Scanner[/dim]
-[dim italic]v1.0.0 — by hackpuntes.com[/dim italic]
-"""
+def _get_banner() -> str:
+    try:
+        from core import __version__
+    except Exception:
+        __version__ = "unknown"
+    return (
+        "\n[bold red]"
+        "    ___    ____  ___________\n"
+        "   /   |  / __ \\/ ____/ ___/\n"
+        "  / /| | / /_/ / __/  \\__ \\ \n"
+        " / ___ |/ _, _/ /___ ___/ / \n"
+        "/_/  |_/_/ |_/_____//____/  [/bold red]\n"
+        f"[dim]Advanced Reconnaissance & Enumeration Scanner[/dim]\n"
+        f"[dim italic]v{__version__} — by hackpuntes.com[/dim italic]\n"
+    )
+
+BANNER = _get_banner()
 
 
 def print_banner():

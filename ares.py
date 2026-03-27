@@ -10,6 +10,7 @@ Usage:
     sudo python3 ares.py -t 10.10.11.100 -m nmap,fuzzing
 """
 import argparse
+import subprocess
 import sys
 import os
 
@@ -88,11 +89,108 @@ Made with ☠  by hackpuntes.com
     parser.add_argument("--discover", action="store_true",
                         help="Network host discovery mode (use -t <network/CIDR>)")
 
+    # Update
+    parser.add_argument("--update", action="store_true",
+                        help="Update ARES to the latest version from GitHub")
+
+    # Version
+    from core import __version__
+    parser.add_argument("--version", action="version", version=f"ARES v{__version__}")
+
     # Preflight
     parser.add_argument("--check", action="store_true",
                         help="Check dependencies and exit (no scan)")
 
     return parser.parse_args()
+
+
+GITHUB_URL = "https://github.com/JavierOlmedo/ARES.git"
+ARES_DIR   = os.path.dirname(os.path.abspath(__file__))
+
+
+def cmd_update():
+    """Pull latest version from GitHub, update pip deps, re-install wrapper."""
+    from rich.panel import Panel
+    from rich import box
+
+    logger.print_banner()
+    logger.info(f"Source : {GITHUB_URL}")
+    logger.info(f"Install: {ARES_DIR}")
+    logger.console.print()
+
+    # ── Ensure git is available ──────────────────────────────────────────────
+    if not subprocess.run(["which", "git"], capture_output=True).returncode == 0:
+        logger.error("git not found — cannot update.")
+        sys.exit(1)
+
+    # ── Point origin to the canonical GitHub URL ─────────────────────────────
+    subprocess.run(
+        ["git", "-C", ARES_DIR, "remote", "set-url", "origin", GITHUB_URL],
+        capture_output=True,
+    )
+
+    # ── git pull ─────────────────────────────────────────────────────────────
+    logger.info("Pulling latest changes...")
+    result = subprocess.run(
+        ["git", "-C", ARES_DIR, "pull", "origin", "main"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"git pull failed:\n{result.stderr.strip()}")
+        sys.exit(1)
+
+    stdout = result.stdout.strip()
+    if "Already up to date" in stdout:
+        logger.success("Already on the latest version.")
+    else:
+        logger.success("Repository updated.")
+        logger.console.print(f"  [dim]{stdout}[/dim]")
+
+    # Show new version
+    try:
+        with open(os.path.join(ARES_DIR, "VERSION")) as _f:
+            new_ver = _f.read().strip()
+        logger.info(f"Version: {new_ver}")
+    except FileNotFoundError:
+        pass
+
+    # ── pip deps ─────────────────────────────────────────────────────────────
+    logger.info("Updating Python dependencies...")
+    req = os.path.join(ARES_DIR, "requirements.txt")
+    pip = subprocess.run(
+        ["pip3", "install", "-r", req, "-q"],
+        capture_output=True, text=True,
+    )
+    if pip.returncode == 0:
+        logger.success("Python dependencies up to date.")
+    else:
+        logger.warning(f"pip had issues: {pip.stderr.strip()}")
+
+    # ── Re-install wrapper (/usr/local/bin/ares) ─────────────────────────────
+    logger.info("Refreshing /usr/local/bin/ares wrapper...")
+    wrapper_content = (
+        "#!/usr/bin/env bash\n"
+        f"if [[ $EUID -ne 0 ]]; then\n"
+        f"    exec sudo python3 {ARES_DIR}/ares.py \"$@\"\n"
+        f"else\n"
+        f"    exec python3 {ARES_DIR}/ares.py \"$@\"\n"
+        f"fi\n"
+    )
+    try:
+        wrapper_path = "/usr/local/bin/ares"
+        with open(wrapper_path, "w") as f:
+            f.write(wrapper_content)
+        os.chmod(wrapper_path, 0o755)
+        logger.success(f"Wrapper updated: {wrapper_path}")
+    except PermissionError:
+        logger.warning("Cannot write /usr/local/bin/ares — re-run with sudo to refresh wrapper.")
+
+    logger.console.print()
+    logger.console.print(Panel(
+        "[green]ARES updated successfully![/green]\n[dim]ares -t <TARGET_IP>[/dim]",
+        border_style="green", box=box.ROUNDED,
+    ))
+    sys.exit(0)
 
 
 def cmd_check():
@@ -197,6 +295,9 @@ def build_config(args) -> AresConfig:
 def main():
     # Check if running as root (needed for SYN scan)
     args = parse_args()
+
+    if args.update:
+        cmd_update()  # exits
 
     if args.check:
         cmd_check()  # exits
