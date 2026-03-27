@@ -60,6 +60,8 @@ Made with ☠  by hackpuntes.com
     parser.add_argument("--no-fuzz", action="store_true", help="Skip fuzzing module")
 
     # Scan options
+    parser.add_argument("--post-nmap-delay", type=int, default=5,
+                        help="Seconds to wait after nmap before fuzzing (default: 5, 0 to disable)")
     parser.add_argument("--udp", action="store_true", help="Enable UDP scanning")
     parser.add_argument("--threads", type=int, default=23, help="Number of threads (default: 23)")
     parser.add_argument("--fuzz-depth", type=int, default=0,
@@ -297,6 +299,7 @@ def build_config(args) -> AresConfig:
         config.wordlist_passwords = args.wordlist_passwords
     if args.fuzz_depth:
         config.fuzz_max_depth = args.fuzz_depth
+    config.post_nmap_delay = args.post_nmap_delay
 
     # Process module selection
     modules = [m.strip() for m in args.modules.split(",")]

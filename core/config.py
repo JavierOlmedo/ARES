@@ -85,6 +85,7 @@ class AresConfig:
 
     nmap_top_ports: int = 1000
     nmap_scripts: bool = True
+    post_nmap_delay: int = 5  # seconds to wait after nmap before next module
     run_udp: bool = False
     fuzz_extensions: str = "php,html,txt,asp,aspx,jsp,bak,old,config"
     fuzz_max_depth: int = 1

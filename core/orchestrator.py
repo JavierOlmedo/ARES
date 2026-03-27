@@ -37,6 +37,8 @@ class Orchestrator:
         logger.info(f"Output   : {self.config.output_dir}")
         logger.info(f"Intensity: {self.config.intensity}")
         logger.info(f"Threads  : {self.config.threads}")
+        if self.config.post_nmap_delay:
+            logger.info(f"NmapDelay: {self.config.post_nmap_delay}s")
         logger.info(f"Modules  : {', '.join(self.config.modules_enabled)}")
         logger.info(f"WL dirs  : {self.config.wordlist_web}")
         logger.info(f"WL files : {self.config.wordlist_web_files}")
@@ -69,6 +71,12 @@ class Orchestrator:
             # Store result and make available to next modules
             self.results[module_name] = result
             context[module_name] = result
+
+            # After nmap, give the target time to recover from the scan
+            # (SYN flood + HTTP scripts can exhaust connection pools or trigger rate limiting)
+            if module_name == "nmap" and self.config.post_nmap_delay > 0:
+                logger.info(f"Waiting {self.config.post_nmap_delay}s for target to stabilize after nmap...")
+                time.sleep(self.config.post_nmap_delay)
 
         # Compute total time
         total_time = time.time() - self.start_time
