@@ -210,7 +210,7 @@ class FuzzingModule(BaseModule):
                     f'-w {wordlist} '
                     f'-H "User-Agent: {ua}" '
                     f'{ext_flag} {proxy_flag_ffuf} '
-                    f'-t {effective_threads} -timeout 10 -o {json_out} -of json -mc all -fc 404'
+                    f'-t {effective_threads} -timeout 7 -o {json_out} -of json -mc all -fc 404 -ac'
                 )
                 result = run_command_live(
                     cmd, timeout=600,

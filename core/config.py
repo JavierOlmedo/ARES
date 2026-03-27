@@ -50,7 +50,7 @@ class AresConfig:
     target_ip: str = ""
     hostname: str = ""
     output_dir: str = ""
-    threads: int = 25
+    threads: int = 23
     intensity: str = "normal"  # quiet, normal, aggressive
     discover_mode: bool = False
     proxy: str = ""  # e.g. http://127.0.0.1:8080
@@ -87,7 +87,7 @@ class AresConfig:
     nmap_scripts: bool = True
     run_udp: bool = False
     fuzz_extensions: str = "php,html,txt,asp,aspx,jsp,bak,old,config"
-    fuzz_max_depth: int = 2
+    fuzz_max_depth: int = 1
     nuclei_severity: str = "low,medium,high,critical"
     brute_services: list = field(default_factory=lambda: [
         "ssh", "ftp", "smb", "rdp", "http-get", "mysql", "postgres", "mssql"

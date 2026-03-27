@@ -36,6 +36,7 @@ class Orchestrator:
             logger.info(f"Hostname : {self.config.hostname}")
         logger.info(f"Output   : {self.config.output_dir}")
         logger.info(f"Intensity: {self.config.intensity}")
+        logger.info(f"Threads  : {self.config.threads}")
         logger.info(f"Modules  : {', '.join(self.config.modules_enabled)}")
         logger.info(f"WL dirs  : {self.config.wordlist_web}")
         logger.info(f"WL files : {self.config.wordlist_web_files}")

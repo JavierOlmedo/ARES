@@ -61,7 +61,9 @@ Made with ☠  by hackpuntes.com
 
     # Scan options
     parser.add_argument("--udp", action="store_true", help="Enable UDP scanning")
-    parser.add_argument("--threads", type=int, default=25, help="Number of threads (default: 25)")
+    parser.add_argument("--threads", type=int, default=23, help="Number of threads (default: 23)")
+    parser.add_argument("--fuzz-depth", type=int, default=0,
+                        help="Max recursion depth for fuzzing (default: 1, 0 = use config)")
     parser.add_argument("--top-ports", type=int, default=1000, help="Nmap top ports (default: 1000)")
 
     # Wordlists (defaults resolved from wordlists/ folder — see AresConfig)
@@ -293,6 +295,8 @@ def build_config(args) -> AresConfig:
         config.wordlist_users = args.wordlist_users
     if args.wordlist_passwords:
         config.wordlist_passwords = args.wordlist_passwords
+    if args.fuzz_depth:
+        config.fuzz_max_depth = args.fuzz_depth
 
     # Process module selection
     modules = [m.strip() for m in args.modules.split(",")]

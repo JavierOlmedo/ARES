@@ -162,7 +162,8 @@ MODULE_REGISTRY["mymodule"] = MyModule
 | `--no-nuclei`            | Skip nuclei module                                       |
 | `--discover`             | Network host discovery mode (use CIDR as `-t`)           |
 | `--udp`                  | Enable UDP scan                                          |
-| `--threads`              | Thread count (default: `25`)                             |
+| `--threads`              | Thread count (default: `23`)                             |
+| `--fuzz-depth`           | Fuzzing recursion depth (default: `1`)                   |
 | `--top-ports`            | Nmap top ports (default: `1000`)                         |
 | `--extensions`           | Fuzz file extensions (default: `php,html,txt,asp,...`)   |
 | `--wordlist-web`         | Wordlist for directory fuzzing                           |
