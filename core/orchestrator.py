@@ -33,6 +33,10 @@ class Orchestrator:
         logger.info(f"Output: {self.config.output_dir}")
         logger.info(f"Intensity: {self.config.intensity}")
         logger.info(f"Modules: {', '.join(self.config.modules_enabled)}")
+        logger.info(f"Wordlist dirs : {self.config.wordlist_web}")
+        logger.info(f"Wordlist files: {self.config.wordlist_web_files}")
+        logger.info(f"Wordlist users: {self.config.wordlist_users}")
+        logger.info(f"Wordlist pass : {self.config.wordlist_passwords}")
         logger.console.print()
 
         # Setup workspace

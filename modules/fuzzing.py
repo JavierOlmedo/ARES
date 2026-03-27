@@ -12,7 +12,7 @@ import os
 import re
 import json
 from modules.base import BaseModule
-from core.utils import run_command, check_tool
+from core.utils import run_command, run_command_live, check_tool
 from core import logger
 
 
@@ -148,42 +148,63 @@ class FuzzingModule(BaseModule):
 
     def _fuzz(self, url: str, port: int, mode: str, label: str) -> list:
         """
-        Run one fuzzing pass.
+        Run one fuzzing pass with real-time output.
         mode='dirs'  → no extensions (directory discovery)
         mode='files' → with extensions (file discovery)
         """
         outfile = os.path.join(self.output_path, f"{label}.txt")
         exts = self.config.fuzz_extensions
         threads = self.config.threads
+        found_live = []  # filled by the streaming callback
+
+        # Use dedicated wordlist per mode
+        wordlist = self.config.wordlist_web_files if mode == "files" else self.config.wordlist_web
 
         if self.fuzzer == "gobuster":
             cmd = (
                 f"gobuster dir -u {url} "
-                f"-w {self.config.wordlist_web} "
+                f"-w {wordlist} "
                 + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} -o {outfile} --no-error -q -k --timeout 10s"
+                + f"-t {threads} --no-error -q -k --timeout 10s"
             )
+            result = run_command_live(
+                cmd, timeout=600,
+                on_line=lambda line: self._on_gobuster_line(line, port, mode, found_live),
+            )
+            # Save raw output to file
+            with open(outfile, "w") as f:
+                f.write(result.get("stdout", ""))
+            return found_live
+
         elif self.fuzzer == "ffuf":
             ext_flag = f"-e .{exts.replace(',', ',.')}" if mode == "files" else ""
             json_out = outfile.replace(".txt", ".json")
             cmd = (
                 f"ffuf -u {url}/FUZZ "
-                f"-w {self.config.wordlist_web} "
+                f"-w {wordlist} "
                 f"{ext_flag} "
-                f"-t {threads} -o {json_out} -of json -mc all -fc 404 -c -s"
+                f"-t {threads} -o {json_out} -of json -mc all -fc 404 -c"
             )
+            result = run_command_live(
+                cmd, timeout=600,
+                on_line=lambda line: self._on_ffuf_line(line, port, mode, found_live),
+            )
+            return found_live or self._parse_results(outfile, result, port, mode)
+
         elif self.fuzzer == "feroxbuster":
             cmd = (
                 f"feroxbuster -u {url} "
-                f"-w {self.config.wordlist_web} "
+                f"-w {wordlist} "
                 + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} -o {outfile} -k --quiet --depth 1"
+                + f"-t {threads} -o {outfile} -k --depth 1"
             )
-        else:
-            return []
+            result = run_command_live(
+                cmd, timeout=600,
+                on_line=lambda line: self._on_ferox_line(line, port, mode, found_live),
+            )
+            return found_live or self._parse_results(outfile, result, port, mode)
 
-        result = run_command(cmd, timeout=600)
-        return self._parse_results(outfile, result, port, mode)
+        return []
 
     def _fuzz_vhosts(self, scheme: str, port: int) -> list:
         wordlist = self.config.wordlist_vhost
@@ -217,6 +238,50 @@ class FuzzingModule(BaseModule):
 
         run_command(cmd, timeout=300)
         return self._parse_vhosts(outfile)
+
+    # ── Live callbacks (real-time output) ────────────────────────────────────
+
+    def _on_gobuster_line(self, line: str, port: int, mode: str, found: list):
+        """Parse gobuster stdout line and print finding immediately."""
+        m = re.search(r'(\S+)\s+\(Status:\s*(\d+)\)\s+\[Size:\s*(\d+)\]', line)
+        if not m:
+            return
+        path, status, size = m.group(1), int(m.group(2)), int(m.group(3))
+        self._print_live_finding(path, status, size)
+        found.append({"path": path, "status": status, "size": size, "port": port, "type": mode})
+
+    def _on_ffuf_line(self, line: str, port: int, mode: str, found: list):
+        """Print ffuf findings from its non-JSON stdout (status lines)."""
+        # ffuf prints: [Status: 200, Size: 123, Words: 10, Lines: 5] /path
+        m = re.search(r'\[Status:\s*(\d+),\s*Size:\s*(\d+).*?\]\s+(\S+)', line)
+        if not m:
+            return
+        status, size, path = int(m.group(1)), int(m.group(2)), m.group(3)
+        self._print_live_finding(path, status, size)
+        found.append({"path": path, "status": status, "size": size, "port": port, "type": mode})
+
+    def _on_ferox_line(self, line: str, port: int, mode: str, found: list):
+        """Parse feroxbuster stdout line."""
+        m = re.search(r'^(\d{3})\s+\d+l\s+\d+w\s+(\d+)c\s+(http\S+)', line)
+        if not m:
+            return
+        status, size, path = int(m.group(1)), int(m.group(2)), m.group(3)
+        self._print_live_finding(path, status, size)
+        found.append({"path": path, "status": status, "size": size, "port": port, "type": mode})
+
+    @staticmethod
+    def _print_live_finding(path: str, status: int, size: int):
+        if status in (200, 204):
+            color = "green"
+        elif status in (301, 302, 307, 308):
+            color = "yellow"
+        elif status == 403:
+            color = "red"
+        else:
+            color = "cyan"
+        logger.console.print(
+            f"    [{color}]{status}[/{color}]  {path}  [dim]{size}b[/dim]"
+        )
 
     # ── Parsers ───────────────────────────────────────────────────────────────
 

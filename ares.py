@@ -63,15 +63,17 @@ Made with ☠  by hackpuntes.com
     parser.add_argument("--threads", type=int, default=10, help="Number of threads (default: 10)")
     parser.add_argument("--top-ports", type=int, default=1000, help="Nmap top ports (default: 1000)")
 
-    # Wordlists
-    parser.add_argument("--wordlist-web", default="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
-                        help="Wordlist for directory fuzzing")
-    parser.add_argument("--wordlist-vhost", default="/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
-                        help="Wordlist for vhost fuzzing")
-    parser.add_argument("--wordlist-users", default="/usr/share/seclists/Usernames/top-usernames-shortlist.txt",
-                        help="Wordlist for username brute-force")
-    parser.add_argument("--wordlist-passwords", default="/usr/share/wordlists/rockyou.txt",
-                        help="Wordlist for password brute-force")
+    # Wordlists (defaults resolved from wordlists/ folder — see AresConfig)
+    parser.add_argument("--wordlist-web", default="",
+                        help="Wordlist for directory fuzzing (default: wordlists/web/raft-large-directories-*)")
+    parser.add_argument("--wordlist-web-files", default="",
+                        help="Wordlist for file fuzzing (default: wordlists/web/raft-large-files-*)")
+    parser.add_argument("--wordlist-vhost", default="",
+                        help="Wordlist for vhost fuzzing (default: wordlists/vhost/hackpuntes-subdomains-*)")
+    parser.add_argument("--wordlist-users", default="",
+                        help="Wordlist for username brute-force (default: wordlists/users/hackpuntes-usernames-*)")
+    parser.add_argument("--wordlist-passwords", default="",
+                        help="Wordlist for password brute-force (default: wordlists/passwords/hackpuntes-passwords-*)")
 
     # Extensions
     parser.add_argument("--extensions", default="php,html,txt,asp,aspx,jsp,bak,old,config",
@@ -270,14 +272,21 @@ def build_config(args) -> AresConfig:
         intensity=args.intensity,
         nmap_top_ports=args.top_ports,
         run_udp=args.udp,
-        wordlist_web=args.wordlist_web,
-        wordlist_vhost=args.wordlist_vhost,
-        wordlist_users=args.wordlist_users,
-        wordlist_passwords=args.wordlist_passwords,
         fuzz_extensions=args.extensions,
         nuclei_severity=args.nuclei_severity,
         report_formats=[f.strip() for f in args.report.split(",")],
     )
+    # Only override wordlists if explicitly passed — otherwise keep auto-detected defaults
+    if args.wordlist_web:
+        config.wordlist_web = args.wordlist_web
+    if args.wordlist_web_files:
+        config.wordlist_web_files = args.wordlist_web_files
+    if args.wordlist_vhost:
+        config.wordlist_vhost = args.wordlist_vhost
+    if args.wordlist_users:
+        config.wordlist_users = args.wordlist_users
+    if args.wordlist_passwords:
+        config.wordlist_passwords = args.wordlist_passwords
 
     # Process module selection
     modules = [m.strip() for m in args.modules.split(",")]

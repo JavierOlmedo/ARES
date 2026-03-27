@@ -6,7 +6,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from modules.base import BaseModule
-from core.utils import run_command
+from core.utils import run_command, run_command_live
 from core import logger
 
 
@@ -79,11 +79,22 @@ class NmapModule(BaseModule):
         return results
 
     def _quick_tcp_scan(self) -> list:
-        """Fast SYN scan across all 65535 TCP ports."""
+        """Fast SYN scan across all 65535 TCP ports — streams discovered ports live."""
         outfile = os.path.join(self.output_path, "quick_tcp")
         rate = "10000" if self.config.intensity == "aggressive" else "5000"
-        cmd_str = f"nmap -sS --min-rate {rate} -Pn -p- -oA {outfile} {self.config.target_ip}"
-        run_command(cmd_str, timeout=600)
+        # -v makes nmap print each discovered port as it finds it
+        cmd_str = f"nmap -sS --min-rate {rate} -Pn -p- -v -oA {outfile} {self.config.target_ip}"
+
+        def _on_nmap_line(line: str):
+            # "Discovered open port 80/tcp on 10.10.11.100"
+            if "Discovered open port" in line:
+                port_part = line.split("Discovered open port")[-1].strip().split()[0]
+                logger.console.print(f"    [green]open[/green]  {port_part}")
+            elif "Stats:" in line or "SYN Stealth" in line:
+                # Show progress stats nmap prints every few seconds
+                logger.console.print(f"    [dim]{line.strip()}[/dim]")
+
+        run_command_live(cmd_str, timeout=600, on_line=_on_nmap_line)
         return self._extract_open_ports(f"{outfile}.xml")
 
     def _full_tcp_scan(self) -> list:
@@ -94,13 +105,24 @@ class NmapModule(BaseModule):
         return self._extract_open_ports(f"{outfile}.xml")
 
     def _detailed_scan(self, ports_csv: str) -> dict:
-        """Version detection + default scripts on discovered ports."""
+        """Version detection + default scripts on discovered ports — streams script results live."""
         outfile = os.path.join(self.output_path, "detailed")
-        cmd = f"nmap -sCV -Pn -p {ports_csv} -oA {outfile} {self.config.target_ip}"
+        cmd = f"nmap -sCV -Pn -p {ports_csv} -v -oA {outfile} {self.config.target_ip}"
         if self.config.hostname:
             cmd += f" --script-args 'http.host={self.config.hostname}'"
 
-        run_command(cmd, timeout=600)
+        def _on_detail_line(line: str):
+            line = line.strip()
+            if not line:
+                return
+            # Port lines: "80/tcp  open  http  Apache httpd 2.4.41"
+            if re.match(r'^\d+/\w+\s+open', line):
+                logger.console.print(f"    [cyan]{line}[/cyan]")
+            # Script output lines (indented with |)
+            elif line.startswith("|"):
+                logger.console.print(f"    [dim]{line}[/dim]")
+
+        run_command_live(cmd, timeout=600, on_line=_on_detail_line)
         return self._parse_detailed_xml(f"{outfile}.xml", [f"{outfile}.nmap", f"{outfile}.xml", f"{outfile}.gnmap"])
 
     def _udp_scan(self) -> list:

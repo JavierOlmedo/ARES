@@ -54,6 +54,53 @@ def run_command(cmd: list | str, timeout: int = 600, cwd: str = None) -> dict:
         return {"stdout": "", "stderr": str(e), "returncode": -1, "timed_out": False}
 
 
+def run_command_live(cmd: str, timeout: int = 600, on_line=None, cwd: str = None) -> dict:
+    """
+    Run a shell command streaming stdout line by line.
+    Calls on_line(line) for each output line (stripped).
+    Returns same dict as run_command.
+    """
+    import threading
+    stdout_lines = []
+    stderr_lines = []
+
+    try:
+        proc = subprocess.Popen(
+            cmd, shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, cwd=cwd,
+        )
+
+        def _read_stderr():
+            for line in proc.stderr:
+                stderr_lines.append(line)
+
+        t = threading.Thread(target=_read_stderr, daemon=True)
+        t.start()
+
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            if on_line:
+                on_line(line.rstrip())
+
+        proc.wait(timeout=timeout)
+        t.join(timeout=5)
+
+        return {
+            "stdout": "".join(stdout_lines),
+            "stderr": "".join(stderr_lines),
+            "returncode": proc.returncode,
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        warning(f"Command timed out after {timeout}s")
+        return {"stdout": "".join(stdout_lines), "stderr": "TIMEOUT", "returncode": -1, "timed_out": True}
+    except Exception as e:
+        error(f"Command failed: {e}")
+        return {"stdout": "", "stderr": str(e), "returncode": -1, "timed_out": False}
+
+
 def parse_nmap_service(service_str: str) -> str:
     """Normalize nmap service names for brute-force targeting."""
     mapping = {

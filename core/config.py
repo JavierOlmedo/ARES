@@ -10,13 +10,38 @@ from typing import Optional
 _LOCAL_WORDLISTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "wordlists")
 
 
-def _local_first(candidates: list, fallback: str) -> str:
-    """Try local wordlist candidates in order, return first found, else fallback."""
-    for subpath in candidates:
-        local = os.path.join(_LOCAL_WORDLISTS, subpath)
-        if os.path.isfile(local):
-            return local
+def _get_ares_home() -> str:
+    """Return ~/.ares for the real user, even when running under sudo."""
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        try:
+            import pwd
+            return os.path.join(pwd.getpwnam(sudo_user).pw_dir, ".ares")
+        except (KeyError, ImportError):
+            pass
+    return os.path.join(os.path.expanduser("~"), ".ares")
+
+
+def _local_find(subdir: str, prefixes: list, fallback: str) -> str:
+    """
+    Find the first file in wordlists/{subdir}/ whose name starts with any
+    of the given prefixes (tried in order). Falls back to system path if none found.
+    """
+    import glob
+    folder = os.path.join(_LOCAL_WORDLISTS, subdir)
+    for prefix in prefixes:
+        matches = sorted(glob.glob(os.path.join(folder, f"{prefix}*")))
+        if matches:
+            return matches[0]
     return fallback
+
+
+def _sys_first(candidates: list) -> str:
+    """Return first existing system path, or last entry as default."""
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return candidates[-1]
 
 
 @dataclass
@@ -29,26 +54,33 @@ class AresConfig:
     intensity: str = "normal"  # quiet, normal, aggressive
     discover_mode: bool = False
 
-    # Wordlists — local hackpuntes lists take priority over system defaults
-    wordlist_users: str = field(default_factory=lambda: _local_first([
-        "users/hackpuntes-usernames-12534.txt",
-        "users/hackpuntes-basic-23.txt",
-        "users/custom.txt",
-    ], "/usr/share/seclists/Usernames/top-usernames-shortlist.txt"))
+    # Wordlists — local lists take priority, auto-detected by prefix
+    wordlist_users: str = field(default_factory=lambda: _local_find(
+        "users", ["hackpuntes-usernames", "hackpuntes-basic"],
+        _sys_first(["/usr/share/seclists/Usernames/top-usernames-shortlist.txt",
+                    "/usr/share/wordlists/seclists/Usernames/top-usernames-shortlist.txt"])))
 
-    wordlist_passwords: str = field(default_factory=lambda: _local_first([
-        "passwords/hackpuntes-passwords-23.txt",
-        "passwords/most-common-passwords-1000.txt",
-        "passwords/custom.txt",
-    ], "/usr/share/wordlists/rockyou.txt"))
+    wordlist_passwords: str = field(default_factory=lambda: _local_find(
+        "passwords", ["hackpuntes-passwords", "most-common-passwords"],
+        "/usr/share/wordlists/rockyou.txt"))
 
-    wordlist_web: str = field(default_factory=lambda: _local_first([
-        "web/custom.txt",
-    ], "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"))
+    # Web: directories wordlist (phase 1 fuzzing)
+    wordlist_web: str = field(default_factory=lambda: _local_find(
+        "web", ["raft-large-directories", "raft-medium-directories"],
+        _sys_first(["/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt",
+                    "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"])))
 
-    wordlist_vhost: str = field(default_factory=lambda: _local_first([
-        "vhost/custom.txt",
-    ], "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"))
+    # Web: files wordlist (phase 2 fuzzing — with extensions)
+    wordlist_web_files: str = field(default_factory=lambda: _local_find(
+        "web", ["raft-large-files", "raft-medium-files"],
+        _sys_first(["/usr/share/seclists/Discovery/Web-Content/raft-large-files.txt",
+                    "/usr/share/seclists/Discovery/Web-Content/common.txt",
+                    "/usr/share/wordlists/dirb/common.txt"])))
+
+    wordlist_vhost: str = field(default_factory=lambda: _local_find(
+        "vhost", ["hackpuntes-subdomains", "subdomains"],
+        _sys_first(["/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+                    "/usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt"])))
 
     nmap_top_ports: int = 1000
     nmap_scripts: bool = True
@@ -66,8 +98,7 @@ class AresConfig:
         """Create organized folder structure for the target."""
         if not self.output_dir:
             safe_name = self.hostname.replace(".", "_") if self.hostname else self.target_ip.replace(".", "_")
-            ares_home = os.path.expanduser("~/.ares")
-            self.output_dir = os.path.join(ares_home, safe_name)
+            self.output_dir = os.path.join(_get_ares_home(), safe_name)
 
         dirs = [
             self.output_dir,
