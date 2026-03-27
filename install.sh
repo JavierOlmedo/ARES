@@ -136,6 +136,7 @@ WRAPPER_EOF
 
 if sudo mv /tmp/ares_wrapper "$WRAPPER" && sudo chmod +x "$WRAPPER"; then
     ok "ares → $WRAPPER (installed from $INSTALL_DIR)"
+    chmod +x "$INSTALL_DIR/ares.py" 2>/dev/null || true
     info "You can now run: ares -t <TARGET_IP>"
 else
     fail "Could not install wrapper at $WRAPPER — try: sudo bash install.sh"
