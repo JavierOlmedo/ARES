@@ -17,6 +17,9 @@ class NmapModule(BaseModule):
     phase = 0
 
     def run(self, context: dict) -> dict:
+        if self.config.discover_mode:
+            return self._run_discover()
+
         results = {
             "ports": [],
             "tcp_ports_csv": "",
@@ -169,6 +172,58 @@ class NmapModule(BaseModule):
             logger.warning(f"Could not parse detailed XML: {e}")
 
         return result
+
+    def _run_discover(self) -> dict:
+        """Network host discovery mode (--discover)."""
+        outfile = os.path.join(self.output_path, "discover")
+        os.makedirs(self.output_path, exist_ok=True)
+
+        network = self.config.target_ip  # should be a CIDR range, e.g. 10.10.10.0/24
+        cmd = (
+            f"nmap -sn -PE -PM -PP "
+            f"-PS21,22,23,25,53,80,111,139,443,445,3389,8080 "
+            f"-PA80,139,443,445,3389 "
+            f"-PU53,67,137,138,161,500,1900,5353 "
+            f"-oA {outfile} -vvv {network}"
+        )
+        logger.info(f"Network discovery on {network}")
+        logger.info(f"  $ {cmd}")
+        result = run_command(cmd, timeout=300)
+
+        hosts = self._parse_discover_xml(f"{outfile}.xml")
+
+        if hosts:
+            logger.success(f"Discovered {len(hosts)} host(s):")
+            for h in hosts:
+                label = f"  {h['ip']}"
+                if h.get("hostname"):
+                    label += f"  ({h['hostname']})"
+                logger.info(label)
+        else:
+            logger.warning("No hosts discovered.")
+
+        return {"discover_hosts": hosts, "raw_files": [f"{outfile}.xml"]}
+
+    def _parse_discover_xml(self, xml_file: str) -> list:
+        hosts = []
+        try:
+            tree = ET.parse(xml_file)
+            for host_elem in tree.getroot().iter("host"):
+                status = host_elem.find("status")
+                if status is None or status.get("state") != "up":
+                    continue
+                addr_elem = host_elem.find("address[@addrtype='ipv4']")
+                if addr_elem is None:
+                    continue
+                ip = addr_elem.get("addr", "")
+                hostname = ""
+                hn_elem = host_elem.find(".//hostname")
+                if hn_elem is not None:
+                    hostname = hn_elem.get("name", "")
+                hosts.append({"ip": ip, "hostname": hostname})
+        except (FileNotFoundError, ET.ParseError) as e:
+            logger.warning(f"Could not parse discover XML: {e}")
+        return hosts
 
     def _parse_udp(self, xml_file: str) -> list:
         """Parse UDP scan results."""

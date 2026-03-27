@@ -7,7 +7,7 @@
 
 - **Nmap Module** — Quick SYN scan → full port discovery → deep version/script scan + optional UDP
 - **Fuzzing Module** — Directory brute-forcing + VHost enumeration (auto-detects gobuster/ffuf/feroxbuster)
-- **Brute Force Module** — Hydra-based credential attacks on detected services (SSH, FTP, SMB, RDP, MySQL...)
+- **Brute Force Module** — Patator-based credential attacks on detected services (SSH, FTP, SMB, RDP, MySQL...)
 - **Nuclei Module** — Automated vulnerability scanning with severity filtering
 - **Smart pipeline** — Each module passes context to the next (nmap → fuzzing/brute targets)
 - **Triple reporting** — Rich console output + Markdown + HTML dark-themed report
@@ -33,9 +33,18 @@ bash install.sh
 pip install -r requirements.txt
 ```
 
-System tools required: `nmap`, `gobuster`/`ffuf`/`feroxbuster`, `hydra`, `nuclei`
+System tools required: `nmap`, `gobuster`/`ffuf`/`feroxbuster`, `patator`, `nuclei`
 Wordlists required: `seclists`, `rockyou.txt`
 Root privileges recommended (SYN scan)
+
+### Update
+
+```bash
+cd /opt/ARES
+bash install.sh --update
+```
+
+Pulls the latest changes from git and re-verifies all dependencies.
 
 ### Verify your setup
 
@@ -46,8 +55,11 @@ python3 ares.py --check
 ## Quick Start
 
 ```bash
-# Basic scan (all modules)
+# Basic scan (all modules: nmap + fuzzing + bruteforce + nuclei)
 sudo python3 ares.py -t 10.10.11.100 -H target.htb
+
+# Network discovery first (find live hosts in a range)
+sudo python3 ares.py -t 10.10.10.0/24 --discover
 
 # Quick scan — nmap + fuzzing only
 sudo python3 ares.py -t 10.10.11.100 -H target.htb -m nmap,fuzzing
@@ -95,7 +107,7 @@ ares_target_htb/
 |-------------|-------|--------------------------|------------------------------------|
 | `nmap`      | 0     | nmap                     | Port scan + service enumeration    |
 | `fuzzing`   | 1     | gobuster / ffuf / ferox  | Directory + VHost brute-forcing    |
-| `bruteforce`| 2     | hydra                    | Credential attacks                 |
+| `bruteforce`| 2     | patator                  | Credential attacks                 |
 | `nuclei`    | 2     | nuclei                   | CVE + misconfig scanning           |
 
 ## Adding Custom Modules
@@ -133,8 +145,9 @@ MODULE_REGISTRY["mymodule"] = MyModule
 | `-o, --output`        | Custom output directory                    |
 | `--quiet`             | Minimal scan (top 1000 ports, no extras)   |
 | `--aggressive`        | Full port range, higher rate limits        |
-| `-m, --modules`       | Comma-separated module list                |
+| `-m, --modules`       | Comma-separated module list (default: nmap,fuzzing,nuclei) |
 | `--no-brute`          | Skip brute-force                           |
+| `--discover`          | Network host discovery mode (CIDR as -t)   |
 | `--no-nuclei`         | Skip nuclei                                |
 | `--no-fuzz`           | Skip fuzzing                               |
 | `--udp`               | Enable UDP scan                            |
@@ -143,6 +156,25 @@ MODULE_REGISTRY["mymodule"] = MyModule
 | `--extensions`        | Fuzz extensions (default: php,html,txt...) |
 | `--report`            | Report formats (console,markdown,html)     |
 | `--check`             | Verify dependencies and exit               |
+
+## Custom Wordlists
+
+Drop your own lists in the `wordlists/` folder and ARES will use them automatically, overriding system defaults:
+
+```
+wordlists/
+├── users/
+│   └── custom.txt       ← overrides default users wordlist
+├── passwords/
+│   └── custom.txt       ← overrides rockyou.txt
+├── web/
+│   └── custom.txt       ← overrides directory brute-force list
+└── vhost/
+    └── custom.txt       ← overrides vhost enumeration list
+```
+
+If no custom list is present, ARES falls back to system wordlists (`seclists`, `rockyou.txt`, etc.).
+You can also override any wordlist at runtime with the corresponding CLI flag.
 
 ## License
 

@@ -84,6 +84,10 @@ Made with ☠  by hackpuntes.com
     parser.add_argument("--nuclei-severity", default="low,medium,high,critical",
                         help="Nuclei severity filter (default: low,medium,high,critical)")
 
+    # Network discovery
+    parser.add_argument("--discover", action="store_true",
+                        help="Network host discovery mode (use -t <network/CIDR>)")
+
     # Preflight
     parser.add_argument("--check", action="store_true",
                         help="Check dependencies and exit (no scan)")
@@ -162,6 +166,7 @@ def build_config(args) -> AresConfig:
     config = AresConfig(
         target_ip=args.target,
         hostname=args.hostname,
+        discover_mode=args.discover,
         output_dir=args.output,
         threads=args.threads,
         intensity=args.intensity,

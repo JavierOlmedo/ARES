@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# ARES — Install & Dependency Checker
-# Usage: bash install.sh
+# ARES — Install, Update & Dependency Checker
+# Usage:
+#   bash install.sh            → install / verify dependencies
+#   bash install.sh --update   → git pull + update deps
 set -uo pipefail
 
 RED='\033[0;31m'
@@ -16,6 +18,8 @@ fail() { echo -e "  ${RED}✗${RESET}  $1"; ERRORS=$((ERRORS + 1)); }
 info() { echo -e "  ${CYAN}ℹ${RESET}  $1"; }
 
 ERRORS=0
+UPDATE_MODE=0
+[[ "${1:-}" == "--update" ]] && UPDATE_MODE=1
 
 echo -e "\n${BOLD}${RED}    ___    ____  ___________"
 echo -e "   /   |  / __ \/ ____/ ___/"
@@ -24,6 +28,25 @@ echo -e " / ___ |/ _, _/ /___ ___/ / "
 echo -e "/_/  |_/_/ |_/_____//____/  ${RESET}"
 echo -e "${CYAN}  Advanced Reconnaissance & Enumeration Scanner${RESET}"
 echo -e "${CYAN}  Install & Dependency Checker — hackpuntes.com${RESET}\n"
+
+# ── Update mode ────────────────────────────────────────────────────────────────
+if [[ "$UPDATE_MODE" -eq 1 ]]; then
+    echo -e "${BOLD}[Update]${RESET}"
+    if ! command -v git &>/dev/null; then
+        fail "git not found — cannot update"
+        exit 1
+    fi
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    info "Branch: $BRANCH"
+    info "Pulling latest changes..."
+    if git pull origin "$BRANCH"; then
+        ok "Repository updated"
+    else
+        fail "git pull failed"
+        ((ERRORS++))
+    fi
+    echo ""
+fi
 
 # ── Root check ─────────────────────────────────────────────────────────────────
 if [[ "$EUID" -ne 0 ]]; then
@@ -72,7 +95,7 @@ try_install() {
 }
 
 try_install nmap
-try_install hydra
+try_install patator
 try_install nuclei
 
 # Fuzzing: at least one required

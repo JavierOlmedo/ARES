@@ -4,6 +4,7 @@ ARES - Shared Utilities
 import subprocess
 import shutil
 import os
+import re
 from core.logger import warning, error
 
 
@@ -78,16 +79,66 @@ def parse_nmap_service(service_str: str) -> str:
 
 
 def add_to_hosts(ip: str, hostname: str) -> bool:
-    """Ensure /etc/hosts has the entry for ip → hostname. Writes it if missing."""
+    """
+    Ensure /etc/hosts has the correct ip → hostname entry.
+    - If the exact pair already exists: skip.
+    - If the hostname exists with a different IP: ask user whether to update.
+    - If not present: add it.
+    """
     hosts_file = "/etc/hosts"
     entry = f"{ip}\t{hostname}"
+
     try:
         with open(hosts_file, "r") as f:
-            content = f.read()
-        if hostname in content:
+            lines = f.readlines()
+    except PermissionError:
+        warning(f"Cannot read /etc/hosts — run as root or add manually:")
+        warning(f"  echo '{entry}' | sudo tee -a /etc/hosts")
+        return False
+
+    content = "".join(lines)
+
+    # Exact pair already present
+    if re.search(rf'\b{re.escape(ip)}\b.*\b{re.escape(hostname)}\b', content):
+        from core.logger import info
+        info(f"/etc/hosts: {entry} already present")
+        return True
+
+    # Hostname exists but with a different IP
+    existing_match = re.search(rf'^(\S+)\s+.*\b{re.escape(hostname)}\b', content, re.MULTILINE)
+    if existing_match:
+        old_ip = existing_match.group(1)
+        from core.logger import warning as warn
+        warn(f"/etc/hosts: {hostname} already mapped to {old_ip}")
+        try:
+            answer = input(f"  Update to {ip}? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = "n"
+
+        if answer != "y":
             from core.logger import info
-            info(f"/etc/hosts already contains {hostname}")
+            info("Keeping existing /etc/hosts entry.")
+            return False
+
+        # Replace the existing line
+        new_lines = []
+        for line in lines:
+            if re.search(rf'\b{re.escape(hostname)}\b', line) and not line.strip().startswith("#"):
+                new_lines.append(f"{entry}\n")
+            else:
+                new_lines.append(line)
+        try:
+            with open(hosts_file, "w") as f:
+                f.writelines(new_lines)
+            from core.logger import success
+            success(f"/etc/hosts updated: {old_ip} → {ip} for {hostname}")
             return True
+        except PermissionError:
+            warning(f"Cannot write /etc/hosts — run as root")
+            return False
+
+    # Not present at all — append
+    try:
         with open(hosts_file, "a") as f:
             f.write(f"\n{entry}\n")
         from core.logger import success
@@ -121,7 +172,7 @@ def dependency_check() -> dict:
     }
 
     # Required single tools
-    for tool in ["nmap", "hydra", "nuclei"]:
+    for tool in ["nmap", "patator", "nuclei"]:
         results["tools"][tool] = check_tool(tool)
 
     # Fuzzers — at least one required
