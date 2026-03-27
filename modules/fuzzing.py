@@ -19,12 +19,18 @@ from core import logger
 class FuzzingModule(BaseModule):
     name = "fuzzing"
     description = "Directory & file brute-forcing with recursive crawl + VHost enumeration"
-    required_tools = []  # gobuster OR ffuf OR feroxbuster
+    required_tools = []  # ffuf OR gobuster OR feroxbuster
     phase = 1
+
+    UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/134.0.0.0 Safari/537.36"
+    )
 
     def preflight(self) -> bool:
         self.fuzzer = None
-        for candidate in ("gobuster", "ffuf", "feroxbuster"):
+        for candidate in ("ffuf", "gobuster", "feroxbuster"):
             if check_tool(candidate):
                 self.fuzzer = candidate
                 break
@@ -162,32 +168,18 @@ class FuzzingModule(BaseModule):
         logger.info(f"  Wordlist ({mode}): {wordlist}")
 
         proxy_flag = f"--proxy {self.config.proxy}" if self.config.proxy else ""
+        ua = self.UA
 
-        if self.fuzzer == "gobuster":
-            cmd = (
-                f"gobuster dir -u {url} "
-                f"-w {wordlist} "
-                + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} --no-error -q -k --timeout 10s {proxy_flag}"
-            )
-            result = run_command_live(
-                cmd, timeout=600,
-                on_line=lambda line: self._on_gobuster_line(line, port, mode, found_live),
-            )
-            # Save raw output to file
-            with open(outfile, "w") as f:
-                f.write(result.get("stdout", ""))
-            return found_live
-
-        elif self.fuzzer == "ffuf":
+        if self.fuzzer == "ffuf":
             ext_flag = f"-e .{exts.replace(',', ',.')}" if mode == "files" else ""
             json_out = outfile.replace(".txt", ".json")
             proxy_flag_ffuf = f"-x {self.config.proxy}" if self.config.proxy else ""
             cmd = (
-                f"ffuf -u {url}/FUZZ "
-                f"-w {wordlist} "
-                f"{ext_flag} {proxy_flag_ffuf} "
-                f"-t {threads} -o {json_out} -of json -mc all -fc 404 -c"
+                f'ffuf -u {url}/FUZZ '
+                f'-w {wordlist} '
+                f'-H "User-Agent: {ua}" '
+                f'{ext_flag} {proxy_flag_ffuf} '
+                f'-t {threads} -o {json_out} -of json -mc all -fc 404 -s'
             )
             result = run_command_live(
                 cmd, timeout=600,
@@ -195,13 +187,30 @@ class FuzzingModule(BaseModule):
             )
             return found_live or self._parse_results(outfile, result, port, mode)
 
+        elif self.fuzzer == "gobuster":
+            cmd = (
+                f'gobuster dir -u {url} '
+                f'-w {wordlist} '
+                f'-H "User-Agent: {ua}" '
+                + (f'-x {exts} ' if mode == "files" else '')
+                + f'-t {threads} --no-error -q -k --timeout 10s --wildcard {proxy_flag}'
+            )
+            result = run_command_live(
+                cmd, timeout=600,
+                on_line=lambda line: self._on_gobuster_line(line, port, mode, found_live),
+            )
+            with open(outfile, "w") as f:
+                f.write(result.get("stdout", ""))
+            return found_live
+
         elif self.fuzzer == "feroxbuster":
             proxy_flag_ferox = f"--proxy {self.config.proxy}" if self.config.proxy else ""
             cmd = (
-                f"feroxbuster -u {url} "
-                f"-w {wordlist} "
-                + (f"-x {exts} " if mode == "files" else "")
-                + f"-t {threads} -o {outfile} -k --depth 1 {proxy_flag_ferox}"
+                f'feroxbuster -u {url} '
+                f'-w {wordlist} '
+                f'-H "User-Agent: {ua}" '
+                + (f'-x {exts} ' if mode == "files" else '')
+                + f'-t {threads} -o {outfile} -k --depth 1 {proxy_flag_ferox}'
             )
             result = run_command_live(
                 cmd, timeout=600,
@@ -224,19 +233,22 @@ class FuzzingModule(BaseModule):
             else f"{scheme}://{self.config.hostname}:{port}"
         )
 
-        if self.fuzzer == "gobuster":
-            cmd = (
-                f"gobuster vhost -u {target_url} "
-                f"-w {wordlist} -t {self.config.threads} "
-                f"-o {outfile} --append-domain -k -q"
-            )
-        elif self.fuzzer == "ffuf":
+        ua = self.UA
+        if self.fuzzer == "ffuf":
             json_out = outfile.replace(".txt", ".json")
             cmd = (
-                f"ffuf -u {target_url} "
-                f"-H 'Host: FUZZ.{self.config.hostname}' "
-                f"-w {wordlist} -t {self.config.threads} "
-                f"-o {json_out} -of json -mc all -fc 404 -fs 0 -c -s"
+                f'ffuf -u {target_url} '
+                f'-H "Host: FUZZ.{self.config.hostname}" '
+                f'-H "User-Agent: {ua}" '
+                f'-w {wordlist} -t {self.config.threads} '
+                f'-o {json_out} -of json -mc all -fc 404 -fs 0 -c -s'
+            )
+        elif self.fuzzer == "gobuster":
+            cmd = (
+                f'gobuster vhost -u {target_url} '
+                f'-H "User-Agent: {ua}" '
+                f'-w {wordlist} -t {self.config.threads} '
+                f'-o {outfile} --append-domain -k -q'
             )
         else:
             return []
@@ -256,12 +268,13 @@ class FuzzingModule(BaseModule):
         found.append({"path": path, "status": status, "size": size, "port": port, "type": mode})
 
     def _on_ffuf_line(self, line: str, port: int, mode: str, found: list):
-        """Print ffuf findings from its non-JSON stdout (status lines)."""
-        # ffuf prints: [Status: 200, Size: 123, Words: 10, Lines: 5] /path
-        m = re.search(r'\[Status:\s*(\d+),\s*Size:\s*(\d+).*?\]\s+(\S+)', line)
+        """Parse ffuf stdout findings (real-time).
+        ffuf format: <word>   [Status: 200, Size: 123, Words: 10, Lines: 5, Duration: 42ms]
+        """
+        m = re.search(r'^(\S+)\s+\[Status:\s*(\d+),\s*Size:\s*(\d+)', line)
         if not m:
             return
-        status, size, path = int(m.group(1)), int(m.group(2)), m.group(3)
+        path, status, size = m.group(1), int(m.group(2)), int(m.group(3))
         self._print_live_finding(path, status, size)
         found.append({"path": path, "status": status, "size": size, "port": port, "type": mode})
 
